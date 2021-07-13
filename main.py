@@ -1,5 +1,5 @@
 import sys
-from src.kiddou import Kiddou
+from src import Kiddou
 
 def main():
   argv = sys.argv
