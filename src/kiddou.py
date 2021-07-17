@@ -1,6 +1,7 @@
 import sys
 from .error import ErrorHandler
 from .scanner import Scanner
+from .parser import Parser
 
 class Kiddou:
   """The main kiddou program, which reads and executes code."""
@@ -37,5 +38,10 @@ class Kiddou:
     if self.error_handler.has_error():
       return
 
-    for token in tokens:
-      print(token)
+    parser = Parser(tokens, self.error_handler)
+    expr = parser.parse()
+
+    if self.error_handler.has_error():
+      return
+
+    print(expr)

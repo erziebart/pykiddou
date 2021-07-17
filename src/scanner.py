@@ -1,7 +1,8 @@
 from typing import List, Optional, Any
-from.error import ErrorHandler, KiddouError
+from .error import ErrorHandler, KiddouError
 from .token import Token
 from .token_type import TokenType
+from .value import Value, Undef, Bool, Int, Float, String
 
 def is_digit(char: str) -> bool:
     """Return True iff the given character is a digit."""
@@ -66,9 +67,9 @@ class Scanner:
       "||": lambda: self._add_token(TokenType.OR),
     }
     self.reserved_keywords = {
-      "true": lambda: self._add_token(TokenType.TRUE), 
-      "false": lambda: self._add_token(TokenType.FALSE), 
-      "undef": lambda: self._add_token(TokenType.UNDEF),
+      "true": lambda: self._add_token(TokenType.TRUE, Bool(True)), 
+      "false": lambda: self._add_token(TokenType.FALSE, Bool(False)), 
+      "undef": lambda: self._add_token(TokenType.UNDEF, Undef()),
     }
 
 
@@ -164,13 +165,13 @@ class Scanner:
       if not has_exponent:
         literal = self.source[self.start:self.current]
         self._error(f"invalid float \'{literal}\'")
-        return self._add_token(TokenType.FLOAT_LIT, float(literal.split('E')[0]))
+        return self._add_token(TokenType.FLOAT_LIT, Float(float(literal.split('E')[0])))
 
     literal = self.source[self.start:self.current]
     if is_float:
-      return self._add_token(TokenType.FLOAT_LIT, float(literal))
+      return self._add_token(TokenType.FLOAT_LIT, Float(float(literal)))
     else:
-      return self._add_token(TokenType.INT_LIT, int(literal))
+      return self._add_token(TokenType.INT_LIT, Int(int(literal)))
 
 
   def _scan_identifier(self) -> None:
@@ -189,21 +190,30 @@ class Scanner:
   def _scan_string(self) -> None:
     """Scan a string literal."""
     # advance to the end of the inner text
-    while self._peek() != '\"' and not self._is_at_end():
-      if self._peek() == '\n':
-        self.line += 1
+    char = self._peek()
+    while not self._is_at_end() and char != '\n' and char != '\"':
+      self._advance()
+      char = self._peek()
+
+    # check for untermintated strings
+    if char == '\n':
+      self._error("unterminated string: new line")
+    elif self._is_at_end():
+      self._error("unterminated string: end of input")
+
+    # get the string literal (trim initial quote)
+    literal = self.source[self.start+1:self.current]
+
+    # consume the final character ('\"' or '\n')
+    if not self._is_at_end():
       self._advance()
 
-    # error: unterminated string
-    if self._is_at_end():
-      self._error("unterminated string")
+    # make the token
+    self._add_token(TokenType.STRING_LIT, String(literal))
 
-    # consume the closing \"
-    self._advance()
-
-    # trim the quotes
-    literal = self.source[self.start+1:self.current-1]
-    self._add_token(TokenType.STRING_LIT, literal)
+    # maybe advance the line number
+    if char == '\n':
+      self._newline()
 
 
   def _scan_comment(self) -> None:
@@ -212,7 +222,7 @@ class Scanner:
       self._advance()
 
 
-  def _add_token(self, token_type: TokenType, literal: Optional[Any] = None) -> None:
+  def _add_token(self, token_type: TokenType, literal: Optional[Value] = None) -> None:
     lexeme = self.source[self.start:self.current]
     token = Token(token_type=token_type, line=self.line, lexeme=lexeme, literal=literal)
     self.tokens.append(token)
