@@ -14,6 +14,7 @@ class ErrorHandler:
   """A handler for Kiddou errors."""
   def __init__(self):
     self.error_list = []
+    self.had_runtime_error = False
 
   def has_error(self) -> bool:
     """Returns True iff this handler has errors to report."""
@@ -23,12 +24,17 @@ class ErrorHandler:
     """Report an error to the handler."""
     self.error_list.append(error)
 
+  def runtime_error(self, error: KiddouError) -> None:
+    self.print_error(error)
+    self.had_runtime_error = True
+
   def flush(self) -> None:
     """Print out all the errors that have been reported, and reset the handler."""
     for error in self.error_list:
       self.print_error(error)
 
     self.error_list = []
+    self.had_runtime_error = False
 
   def print_error(self, error: KiddouError) -> None:
     """Print the the contents of an error to stderr."""

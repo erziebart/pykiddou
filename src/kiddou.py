@@ -2,11 +2,13 @@ import sys
 from .error import ErrorHandler
 from .scanner import Scanner
 from .parser import Parser
+from .interpreter import Interpreter
 
 class Kiddou:
   """The main kiddou program, which reads and executes code."""
   def __init__(self):
     self.error_handler = ErrorHandler()
+    self.interpreter = Interpreter(self.error_handler)
 
   def run_file(self, path: str) -> None:
     """Run a Kiddou program from a file."""
@@ -16,6 +18,8 @@ class Kiddou:
     if self.error_handler.has_error():
       self.error_handler.flush()
       sys.exit(65)
+    if self.error_handler.had_runtime_error:
+      sys.exit(75)
 
   def run_prompt(self) -> None:
     """Run a kiddou program line-by-line using a REPL."""
@@ -44,4 +48,4 @@ class Kiddou:
     if self.error_handler.has_error():
       return
 
-    print(expr)
+    self.interpreter.interpret(expr)
