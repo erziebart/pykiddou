@@ -1,8 +1,9 @@
 import math
-from typing import List
+from typing import List, Mapping
+from .callable import Function
 from .error import ErrorHandler, KiddouError
 from .exception import RuntimeException, TypeException, DivisionException
-from .expr import Expr, BinaryOp, Binary, UnaryOp, Unary, Literal, Variable
+from .expr import Expr, BinaryOp, Binary, UnaryOp, Unary, Literal, Variable, Call
 from .value import Value, Undef, Bool, Int, Float, String
 
 
@@ -25,14 +26,16 @@ def is_truthy(value: Value) -> bool:
 
 class Interpreter:
   """An interpreter for evaluating a program."""
-  def __init__(self, error_handler: ErrorHandler):
+  def __init__(self, error_handler: ErrorHandler, pervasives: Mapping[str, Value]):
     self.error_handler = error_handler
+    self.globals = pervasives.copy()
 
     self.expr_handlers = {
       Binary: self._evaluate_binary,
       Unary: self._evaluate_unary,
       Literal: self._evaluate_literal,
       Variable: self._evaluate_variable,
+      Call: self._evaluate_call,
     }
     self.binary_handlers = {
       BinaryOp.ADD: self._evaluate_add,
@@ -63,14 +66,14 @@ class Interpreter:
     """Interpret some Kiddou code."""
     try:
       value = self._evaluate_expr(expr)
-    except RuntimeException:
-      pass
+    except KiddouError as e:
+      self.error_handler.runtime_error(e)
     else:
       print(value.stringify())
 
 
   #################################################################################################
-  ### Expressions                                                                             #####
+  ### Expressions                                                                               ###
   #################################################################################################
 
   def _evaluate_expr(self, expr: Expr) -> Value:
@@ -79,8 +82,7 @@ class Interpreter:
       return self.expr_handlers[expr.__class__](expr)
     except RuntimeException as e:
       runtime_error = KiddouError(message=str(e), line=expr.line, col=None, text=None)
-      self.error_handler.runtime_error(runtime_error)
-      raise e
+      raise runtime_error
 
 
   def _evaluate_binary(self, binary: Binary) -> Value:
@@ -299,5 +301,12 @@ class Interpreter:
 
 
   def _evaluate_variable(self, variable: Variable) -> Value:
-    # language doesn't have assignment yet, so no point in implementing this
-    return Undef()
+    return self.globals.get(variable.name) or Undef()
+
+
+  def _evaluate_call(self, call: Call) -> Value:
+    callee = self._evaluate_expr(call.callee)
+    arguments = [self._evaluate_expr(arg) for arg in call.arguments]
+    if isinstance(callee, Function):
+      return callee.call(arguments)
+    raise TypeException(f"can only make calls to functions, found <{callee.type_name()}>")

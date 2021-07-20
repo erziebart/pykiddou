@@ -2,13 +2,14 @@ import sys
 from .error import ErrorHandler
 from .scanner import Scanner
 from .parser import Parser
+from .pervasives import pervasives
 from .interpreter import Interpreter
 
 class Kiddou:
   """The main kiddou program, which reads and executes code."""
   def __init__(self):
     self.error_handler = ErrorHandler()
-    self.interpreter = Interpreter(self.error_handler)
+    self.interpreter = Interpreter(self.error_handler, pervasives)
 
   def run_file(self, path: str) -> None:
     """Run a Kiddou program from a file."""

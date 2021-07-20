@@ -1,6 +1,6 @@
 from typing import List, Callable, Optional
 from .error import ErrorHandler, KiddouError
-from .expr import Expr, BinaryOp, Binary, UnaryOp, Unary, Variable, Literal
+from .expr import Expr, BinaryOp, Binary, UnaryOp, Unary, Variable, Literal, Call
 from .token import Token
 from .token_type import TokenType
 
@@ -124,13 +124,29 @@ class Parser:
       right = self._parse_factor()
       return Unary(operator=operator, expr=right, line=token.line)
 
-    expr = self._parse_primary()
+    expr = self._parse_call()
 
     if self._match(TokenType.CARET):
       token = self._previous()
       operator = self.token_type_to_binary_op.get(token.token_type)
       right = self._parse_factor()
       return Binary(left=expr, operator=operator, right=right, line=token.line)
+
+    return expr
+
+
+  def _parse_call(self) -> Expr:
+    expr = self._parse_primary()
+
+    while True:
+      if self._match(TokenType.LPAREN):
+        arguments = []
+        if not self._check(TokenType.RPAREN):
+          arguments = self._parse_arguments()
+        rparen = self._consume(TokenType.RPAREN, "Expected closing ')' after arguments.")
+        expr = Call(callee=expr, arguments=arguments, line=rparen.line)
+      else:
+        break
 
     return expr
 
@@ -153,6 +169,17 @@ class Parser:
       return expr
 
     raise self._error(self._peek(), "Expected expression.")
+
+
+  def _parse_arguments(self) -> List[Expr]:
+    result = [self._parse_expression()]
+
+    while self._match(TokenType.COMMA):
+      if len(result) > 255:
+        self._error(self._peek(), "Can't pass more than 255 arguments.")
+      result.append(self._parse_expression())
+
+    return result
 
 
   def _left_assoc_binary(self, element: Callable[[], Expr], token_types: List[TokenType]) -> Expr:

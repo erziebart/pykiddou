@@ -3,7 +3,7 @@ from typing import Optional
 import sys
 
 @dataclass
-class KiddouError:
+class KiddouError(Exception):
   """A Kiddou error."""
   message: str
   line: int

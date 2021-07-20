@@ -50,6 +50,7 @@ class Scanner:
       "?": lambda: self._add_token(TokenType.QUESTION),
       ";": lambda: self._add_token(TokenType.SEMI),
       ".": lambda: self._add_token(TokenType.DOT),
+      ",": lambda: self._add_token(TokenType.COMMA),
       " ": lambda: None,
       "\t": lambda: None,
       "\r": lambda: None,

@@ -10,7 +10,7 @@ class TypeException(RuntimeException):
     super(TypeException, self).__init__("TypeException: " + message)
 
 
-class DivisionException(object):
+class DivisionException(RuntimeException):
   """docstring for ZeroDivisionException"""
   def __init__(self, message):
     super(DivisionException, self).__init__("DivisionException: " + message)

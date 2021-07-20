@@ -5,7 +5,7 @@ class Value(ABC):
   """A value in the kiddou language."""
   @abstractmethod
   def type_name(self) -> str:
-    return self.__class__.__name__.lower()
+    return self.__class__.__name__
 
   @abstractmethod
   def stringify(self) -> str:

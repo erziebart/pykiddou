@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
+from typing import List
 from .value import Value
 
 @dataclass
@@ -39,3 +40,9 @@ class Variable(Expr):
 class Literal(Expr):
   """A literal value."""
   value: Value
+
+@dataclass
+class Call(Expr):
+  """A call to a function."""
+  callee: Expr
+  arguments: List[Expr]
