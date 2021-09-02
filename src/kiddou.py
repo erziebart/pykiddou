@@ -44,9 +44,9 @@ class Kiddou:
       return
 
     parser = Parser(tokens, self.error_handler)
-    expr = parser.parse()
+    stmts = parser.parse()
 
     if self.error_handler.has_error():
       return
 
-    self.interpreter.interpret(expr)
+    self.interpreter.interpret(stmts)

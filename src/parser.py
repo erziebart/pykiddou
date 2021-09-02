@@ -3,6 +3,7 @@ from .error import ErrorHandler, KiddouError
 from .expr import Expr, BinaryOp, Binary, UnaryOp, Unary, Variable, Literal, Call
 from .token import Token
 from .token_type import TokenType
+from .stmt import Stmt, Con, Run
 
 
 class ParseError(Exception):
@@ -17,6 +18,14 @@ class Parser:
     self.error_handler = error_handler
     self.current = 0
 
+    self.stmt_keywords = {
+      TokenType.CON: self._parse_con,
+      TokenType.RUN: self._parse_run,
+    }
+    self.assignment_token_types = [
+      TokenType.ASSIGN, 
+      TokenType.RE_ASSIGN
+    ]
     self.token_type_to_binary_op = {
       TokenType.SEMI: BinaryOp.PIECE,
       TokenType.QUESTION: BinaryOp.DOMAIN,
@@ -42,18 +51,92 @@ class Parser:
     }
 
 
-  def parse(self) -> Optional[Expr]:
-    try:
-      return self._parse_expression()
-    except ParseError as e:
-      return None
+  def parse(self) -> List[Stmt]:
+    statements = []
+    while not self._is_at_end():
+      try:
+        statements.append(self._parse_statement())
+      except ParseError as e:
+        self._synchronize()
+      
+    return statements
+
+
+  # def parse(self) -> Optional[Expr]:
+  #   try:
+  #     return self._parse_expression()
+  #   except ParseError as e:
+  #     return None
+
+
+  def _parse_statement(self) -> Stmt:
+    token = self._peek()
+    stmt_lambda = self.stmt_keywords.get(token.token_type)
+    if stmt_lambda is None:
+      raise self._error(token, "Expected a statement header keyword.")
+    self._advance()
+    return stmt_lambda()
+
+
+  def _parse_con(self) -> Con:
+    line_start = self._previous().line
+    identifier = self._consume(TokenType.IDENTIFIER, "Expected identifier.")
+
+    assignment = self._peek()
+    if assignment.token_type not in self.assignment_token_types:
+      raise self._error(assignment, "Expected assignment.")
+    self._advance()
+
+    # forbid reassignment for con statements
+    if assignment.token_type is not TokenType.ASSIGN:
+      self._error(assignment, "Reassignment not allowed.")
+
+    expr = self._parse_expression()
+
+    line_end = self._previous().line
+    return Con(
+      line_start = line_start,
+      line_end = line_end,
+      name = identifier.lexeme,
+      expr = expr
+    )
+
+
+  def _parse_run(self) -> Run:
+    line_start = self._previous().line
+    reciever = None
+    assignment = None
+    expr = self._parse_expression()
+
+    # if this is an assignment, reinterpret LHS as reciever
+    if self._match(*self.assignment_token_types):
+      if type(expr) is Variable:
+        reciever = expr
+        assignment = self._previous()
+        expr = self._parse_expression()
+      else:
+        self._error(self._previous(), "Invalid assignment target.")
+        self._parse_expression()
+
+    reassign = False
+    if assignment is not None:
+      reassign = assignment.token_type is not TokenType.ASSIGN
+
+    line_end = self._previous().line
+    return Run(
+      line_start = line_start,
+      line_end = line_end,
+      name = reciever.name if reciever is not None else None,
+      expr = expr,
+      reassign = reassign
+    )
 
 
   def _synchronize(self):
     self._advance()
 
     while not self._is_at_end():
-      if self._previous().token_type == TokenType.SEMI or self._peek().token_type in [
+      if self._peek().token_type in [
         TokenType.DEF, TokenType.TYP, TokenType.CON, TokenType.ARG, TokenType.RUN, TokenType.USE,
       ]:
         return

@@ -1,9 +1,11 @@
 import math
 from typing import List, Mapping
 from .callable import Function
+from .environment import Environment
 from .error import ErrorHandler, KiddouError
 from .exception import RuntimeException, TypeException, DivisionException
 from .expr import Expr, BinaryOp, Binary, UnaryOp, Unary, Literal, Variable, Call
+from .stmt import Stmt, Con, Run
 from .value import Value, Undef, Bool, Int, Float, String
 
 
@@ -28,8 +30,14 @@ class Interpreter:
   """An interpreter for evaluating a program."""
   def __init__(self, error_handler: ErrorHandler, pervasives: Mapping[str, Value]):
     self.error_handler = error_handler
-    self.globals = pervasives.copy()
+    self.globals = Environment()
+    for name, value in pervasives.items():
+      self.globals.bind(name, value)
 
+    self.stmt_handlers = {
+      Con: self._execute_con,
+      Run: self._execute_run,
+    }
     self.expr_handlers = {
       Binary: self._evaluate_binary,
       Unary: self._evaluate_unary,
@@ -62,14 +70,52 @@ class Interpreter:
     }
 
 
-  def interpret(self, expr: Expr):
+  def interpret(self, stmts: List[Stmt]):
     """Interpret some Kiddou code."""
     try:
-      value = self._evaluate_expr(expr)
+      for stmt in stmts:
+        self._execute_stmt(stmt)
     except KiddouError as e:
       self.error_handler.runtime_error(e)
+
+
+  # def interpret(self, expr: Expr):
+  #   """Interpret some Kiddou code."""
+  #   try:
+  #     value = self._evaluate_expr(expr)
+  #   except KiddouError as e:
+  #     self.error_handler.runtime_error(e)
+  #   else:
+  #     print(value.stringify())
+
+
+  #################################################################################################
+  ### Statements                                                                                ###
+  #################################################################################################
+
+  def _execute_stmt(self, stmt: Stmt):
+    """Execute a statement."""
+    try:
+      return self.stmt_handlers[stmt.__class__](stmt)
+    except RuntimeException as e:
+      runtime_error = KiddouError(message=str(e), line=stmt.line_start, col=None, text=None)
+      raise runtime_error
+
+
+  def _execute_con(self, con: Con):
+    value = self._evaluate_expr(con.expr)
+    self.globals.bind(con.name, value, False)
+
+
+  def _execute_run(self, run: Run):
+    value = self._evaluate_expr(run.expr)
+    if run.name is None:
+      return
+
+    if run.reassign:
+      self.globals.overwrite(run.name, value)
     else:
-      print(value.stringify())
+      self.globals.bind(run.name, value, True)
 
 
   #################################################################################################
@@ -301,7 +347,7 @@ class Interpreter:
 
 
   def _evaluate_variable(self, variable: Variable) -> Value:
-    return self.globals.get(variable.name) or Undef()
+    return self.globals.get(variable.name)
 
 
   def _evaluate_call(self, call: Call) -> Value:

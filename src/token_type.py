@@ -9,6 +9,9 @@ _token_type_list = [
   "EQUAL", "BANG_EQUAL", "LESS", "LESS_EQUAL", "GREATER", "GREATER_EQUAL",
   "AND", "OR", "BANG", "QUESTION", "SEMI", "DOT",
 
+  # assignment
+  "ASSIGN", "RE_ASSIGN",
+
   # keywords
   "RUN", "CON", "DEF", "ARG", "USE", "AS", "TYP",
   "UNDEF", "TRUE", "FALSE", "THIS",

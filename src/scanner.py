@@ -51,6 +51,7 @@ class Scanner:
       ";": lambda: self._add_token(TokenType.SEMI),
       ".": lambda: self._add_token(TokenType.DOT),
       ",": lambda: self._add_token(TokenType.COMMA),
+      "=": lambda: self._add_token(TokenType.ASSIGN),
       " ": lambda: None,
       "\t": lambda: None,
       "\r": lambda: None,
@@ -66,11 +67,14 @@ class Scanner:
       ">=": lambda: self._add_token(TokenType.GREATER_EQUAL),
       "&&": lambda: self._add_token(TokenType.AND),
       "||": lambda: self._add_token(TokenType.OR),
+      ":=": lambda: self._add_token(TokenType.RE_ASSIGN),
     }
     self.reserved_keywords = {
       "true": lambda: self._add_token(TokenType.TRUE, Bool(True)), 
       "false": lambda: self._add_token(TokenType.FALSE, Bool(False)), 
       "undef": lambda: self._add_token(TokenType.UNDEF, Undef()),
+      "con": lambda: self._add_token(TokenType.CON),
+      "run": lambda: self._add_token(TokenType.RUN),
     }
 
 
