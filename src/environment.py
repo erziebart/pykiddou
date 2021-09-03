@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Set
 from .exception import NameException, ImmutableException
 from .value import Value
 
@@ -15,8 +16,12 @@ class Environment:
     self.env = dict()
 
 
+  def keys(self) -> Set[str]:
+    return self.env.keys()
+
+
   def bind(self, name: str, value: Value, mutable: bool = False):
-    """Bind the given name map to given value in this environment."""
+    """Bind the given name to given value in this environment."""
     self.env[name] = Reference(val=value, mutable=mutable)
 
 
@@ -27,11 +32,11 @@ class Environment:
     This produces an error if the name is unset or the current value is immutable. 
     """
     if name not in self.env:
-      raise NameException(f"Undefined variable: {name}.")
+      raise NameException(f"undefined variable: {name}.")
 
     cur_value = self.env.get(name)
     if not cur_value.mutable:
-      raise ImmutableException(f"Immutable variable: {name}.")
+      raise ImmutableException(f"immutable variable: {name}.")
 
     cur_value.val = value
 
@@ -40,5 +45,5 @@ class Environment:
     """Get the current value for the given name in this environment."""
     ref = self.env.get(name)
     if ref is None:
-      raise NameException(f"Undefined variable: {name}.")
+      raise NameException(f"undefined variable: {name}.")
     return ref.val

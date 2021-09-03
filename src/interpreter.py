@@ -1,6 +1,7 @@
 import math
 from typing import List, Mapping
 from .callable import Function
+from .checker import Checker
 from .environment import Environment
 from .error import ErrorHandler, KiddouError
 from .exception import RuntimeException, TypeException, DivisionException
@@ -33,6 +34,7 @@ class Interpreter:
     self.globals = Environment()
     for name, value in pervasives.items():
       self.globals.bind(name, value)
+    self.checker = Checker(error_handler)
 
     self.stmt_handlers = {
       Con: self._execute_con,
@@ -72,6 +74,11 @@ class Interpreter:
 
   def interpret(self, stmts: List[Stmt]):
     """Interpret some Kiddou code."""
+    self._check(stmts)
+
+    if self.error_handler.has_error():
+      return
+
     try:
       for stmt in stmts:
         self._execute_stmt(stmt)
@@ -87,6 +94,10 @@ class Interpreter:
   #     self.error_handler.runtime_error(e)
   #   else:
   #     print(value.stringify())
+
+
+  def _check(self, stmts: List[Stmt]):
+    self.checker.check(stmts, self.globals)
 
 
   #################################################################################################
