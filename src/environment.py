@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Set
+from typing import AbstractSet, Optional, Dict
 from .exception import NameException, ImmutableException
 from .value import Value
 
@@ -12,17 +12,33 @@ class Reference:
 class Environment:
   """An environment for variables in a Kiddou program."""
 
-  def __init__(self):
-    self.env = dict()
+  def __init__(self, env: Optional[Dict[str, Reference]] = None):
+    self.env = env if env is not None else dict()
+    self.locals = dict()
 
 
-  def keys(self) -> Set[str]:
-    return self.env.keys()
+  def copy_retain(self, names: AbstractSet[str]):
+    """
+    Create a shallow copy of this Environment which retains the given bindings (names).
+
+    Once the names have been retained once, they are permanent. So copies of the copy will
+    still retain the given names, even if the names are not provided again as argmuments. 
+    """
+    env_copy = { k:v for (k,v) in self.locals.items() if k in names }
+    env_copy.update(self.env)
+    return Environment(env_copy)
+
+
+  def keys(self) -> AbstractSet[str]:
+    for key in self.env.keys():
+      yield key
+    for key in self.locals.keys():
+      yield key
 
 
   def bind(self, name: str, value: Value, mutable: bool = False):
     """Bind the given name to given value in this environment."""
-    self.env[name] = Reference(val=value, mutable=mutable)
+    self.locals[name] = Reference(val=value, mutable=mutable)
 
 
   def overwrite(self, name: str, value: Value):
@@ -31,19 +47,24 @@ class Environment:
 
     This produces an error if the name is unset or the current value is immutable. 
     """
-    if name not in self.env:
+    ref = self.locals.get(name)
+    if ref is None:
+      ref = self.env.get(name)
+
+    if ref is None:
       raise NameException(f"undefined variable: {name}.")
 
-    cur_value = self.env.get(name)
-    if not cur_value.mutable:
+    if not ref.mutable:
       raise ImmutableException(f"immutable variable: {name}.")
 
-    cur_value.val = value
+    ref.val = value
 
 
   def get(self, name: str) -> Value:
     """Get the current value for the given name in this environment."""
-    ref = self.env.get(name)
+    ref = self.locals.get(name)
+    if ref is None:
+      ref = self.env.get(name)
     if ref is None:
       raise NameException(f"undefined variable: {name}.")
     return ref.val

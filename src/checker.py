@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import List, Set, AbstractSet, Optional
 from .environment import Environment
 from .error import ErrorHandler, KiddouError
-from .expr import Expr, Binary, Unary, Literal, Variable, Call
+from .expr import Expr, Binary, Unary, Literal, Variable, Call, Block
 from .stmt import Stmt, Con, Run
 
 
@@ -10,6 +10,20 @@ from .stmt import Stmt, Con, Run
 class VisibleNames:
   parent: Optional["VisibleNames"]
   names: AbstractSet[str]
+
+
+  def __contains__(self, name):
+    return name in self.names or (self.parent is not None and name in self.parent)
+
+
+  def add(self, name):
+    self.names.add(name)
+
+
+@dataclass
+class StatementNames:
+  names_used: AbstractSet[str]
+  name_declared: Optional[str]
 
 
 class Checker:
@@ -27,6 +41,7 @@ class Checker:
       Literal: self._check_literal,
       Variable: self._check_variable,
       Call: self._check_call,
+      Block: self._check_block,
     }
 
   
@@ -38,38 +53,50 @@ class Checker:
     )
 
     for stmt in stmts:
-      self._check_stmt(stmt, visible_names)
+      statement_names = self._check_stmt(stmt, visible_names)
+      if statement_names.name_declared is not None:
+        visible_names.add(statement_names.name_declared)
 
 
   #################################################################################################
   ### Statements                                                                                ###
   #################################################################################################
 
-  def _check_stmt(self, stmt: Stmt, visible_names: VisibleNames) -> Set[str]:
+  """
+  Functions which check statements. They each take visible_names as an argument
+  and return a set of strings which contains all the names from visible_names which 
+  are referenced inside the statement. They might also return a declared name, if a new
+  name was defined by the statement. 
+  """
+
+  def _check_stmt(self, stmt: Stmt, visible_names: VisibleNames) -> StatementNames:
     return self.stmt_handlers[stmt.__class__](stmt, visible_names)
 
 
-  def _check_con(self, con: Con, visible_names: VisibleNames) -> Set[str]:
+  def _check_con(self, con: Con, visible_names: VisibleNames) -> StatementNames:
     names_used = self._check_expr(con.expr, visible_names)
-    visible_names.names.add(con.name)
-    return names_used
+    return StatementNames(names_used = names_used, name_declared = con.name)
 
 
-  def _check_run(self, run: Run, visible_names: VisibleNames) -> Set[str]:
+  def _check_run(self, run: Run, visible_names: VisibleNames) -> StatementNames:
     names_used = self._check_expr(run.expr, visible_names)
     
-    if run.name is not None:
-      if run.reassign:
-        if run.name not in visible_names.names:
-          self._report_undefined(run.name, run.line_start)
-        names_used.add(run.name)
-      visible_names.names.add(run.name)
-    return names_used
+    if run.name is not None and run.reassign:
+      if run.name not in visible_names.names:
+        self._report_undefined(run.name, run.line_start)
+      names_used.add(run.name)
+    return StatementNames(names_used = names_used, name_declared = run.name)
 
 
   #################################################################################################
   ### Expressions                                                                               ###
   #################################################################################################
+
+  """
+  Functions which check expressions. They each take visible_names as an argument
+  and return a set of strings which contains all the names from visible_names which 
+  are referenced inside the expression, or inside any subexpressions.
+  """
 
   def _check_expr(self, expr: Expr, visible_names: VisibleNames) -> Set[str]:
     return self.expr_handlers[expr.__class__](expr, visible_names)
@@ -90,23 +117,51 @@ class Checker:
 
 
   def _check_variable(self, variable: Variable, visible_names: VisibleNames) -> Set[str]:
-    if variable.name not in visible_names.names:
+    if variable.name not in visible_names:
       self._report_undefined(variable.name, variable.line)
-    return set(variable.name) 
+    return set([variable.name]) 
 
 
   def _check_call(self, call: Call, visible_names: VisibleNames) -> Set[str]:
-    result = set()
-    result.update(self._check_expr(call.callee, visible_names))
+    names_used = set()
+    names_used.update(self._check_expr(call.callee, visible_names))
     for arg in call.arguments:
-      result.update(self._check_expr(arg, visible_names))
-    return result
+      names_used.update(self._check_expr(arg, visible_names))
+    return names_used
+
+
+  def _check_block(self, block: Block, visible_names: VisibleNames) -> Set[str]:
+    inner_names = VisibleNames(
+      parent = visible_names,
+      names = set(),
+    )
+
+    names_used = set()
+
+    for stmt in block.stmts:
+      statement_names = self._check_stmt(stmt, inner_names)
+      names_used.update({name for name in statement_names.names_used if name not in inner_names.names})
+      if statement_names.name_declared is not None:
+        inner_names.add(statement_names.name_declared)
+
+    print(names_used)
+
+    if block.expr is not None:
+      names = self._check_expr(block.expr, inner_names)
+      names_used.update({name for name in names if name not in inner_names.names})
+
+    print(names_used)
+
+    # populate set of names in the same scope that this block depends on
+    block.dependent_names = visible_names.names.intersection(names_used)
+    
+    return names_used
 
 
   def _report_undefined(self, name: str, line: int):
     self.error_handler.error(
       KiddouError(
-        message = f"undefined variable: {name}.",
+        message = f"undefined variable: {name}",
         line = line,
         col = None,
         text = None

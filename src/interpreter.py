@@ -1,11 +1,12 @@
 import math
-from typing import List, Mapping
-from .callable import Function
+from contextlib import contextmanager
+from typing import List, Mapping, Collection
+from .callable import Function, KiddouBlock
 from .checker import Checker
 from .environment import Environment
 from .error import ErrorHandler, KiddouError
 from .exception import RuntimeException, TypeException, DivisionException
-from .expr import Expr, BinaryOp, Binary, UnaryOp, Unary, Literal, Variable, Call
+from .expr import Expr, BinaryOp, Binary, UnaryOp, Unary, Literal, Variable, Call, Block
 from .stmt import Stmt, Con, Run
 from .value import Value, Undef, Bool, Int, Float, String
 
@@ -34,6 +35,7 @@ class Interpreter:
     self.globals = Environment()
     for name, value in pervasives.items():
       self.globals.bind(name, value)
+    self.env = self.globals
     self.checker = Checker(error_handler)
 
     self.stmt_handlers = {
@@ -46,6 +48,7 @@ class Interpreter:
       Literal: self._evaluate_literal,
       Variable: self._evaluate_variable,
       Call: self._evaluate_call,
+      Block: self._evaluate_block,
     }
     self.binary_handlers = {
       BinaryOp.ADD: self._evaluate_add,
@@ -115,7 +118,7 @@ class Interpreter:
 
   def _execute_con(self, con: Con):
     value = self._evaluate_expr(con.expr)
-    self.globals.bind(con.name, value, False)
+    self.env.bind(con.name, value, False)
 
 
   def _execute_run(self, run: Run):
@@ -124,9 +127,9 @@ class Interpreter:
       return
 
     if run.reassign:
-      self.globals.overwrite(run.name, value)
+      self.env.overwrite(run.name, value)
     else:
-      self.globals.bind(run.name, value, True)
+      self.env.bind(run.name, value, True)
 
 
   #################################################################################################
@@ -358,7 +361,7 @@ class Interpreter:
 
 
   def _evaluate_variable(self, variable: Variable) -> Value:
-    return self.globals.get(variable.name)
+    return self.env.get(variable.name)
 
 
   def _evaluate_call(self, call: Call) -> Value:
@@ -367,3 +370,38 @@ class Interpreter:
     if isinstance(callee, Function):
       return callee.call(arguments)
     raise TypeException(f"can only make calls to functions, found <{callee.type_name()}>")
+
+
+  def _evaluate_block(self, block: Block) -> Value:
+    block_env = self.env.copy_retain(block.dependent_names)
+
+    def run_block(args: Collection[Value]) -> Value:
+      with self._switch_env(block_env):
+        # exec stmts
+        for stmt in block.stmts:
+          self._execute_stmt(stmt)
+
+        # eval result
+        result = Undef()
+        if block.expr is not None:
+          result = self._evaluate_expr(block.expr)
+
+        return result
+
+    return KiddouBlock(func = run_block, name = None)
+
+
+  @contextmanager
+  def _switch_env(self, env: Environment):
+    try:
+      # transition to new env
+      old_env = self.env
+      new_env = env.copy_retain(set())
+      self.env = new_env
+
+      yield new_env
+    except Exception as e:
+      raise e
+    finally:
+      # restore previous env
+      self.env = old_env

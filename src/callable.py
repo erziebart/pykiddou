@@ -30,3 +30,18 @@ class LibraryFunction(Function):
 
   def call(self, args: Collection[Value]) -> Value:
     return self.func(args)
+
+
+@dataclass
+class KiddouBlock(Function):
+  func: Callable[[Collection[Value]], Value]
+  name: Optional[str]
+
+  def type_name(self) -> str:
+    return super().type_name()
+
+  def stringify(self):
+    return f"{{Func: {self.name}}}" if self.name else super().stringify()
+
+  def call(self, args: Collection[Value]) -> Value:
+    return self.func(args)

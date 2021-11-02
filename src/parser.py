@@ -1,6 +1,6 @@
 from typing import List, Callable, Optional
 from .error import ErrorHandler, KiddouError
-from .expr import Expr, BinaryOp, Binary, UnaryOp, Unary, Variable, Literal, Call
+from .expr import Expr, BinaryOp, Binary, UnaryOp, Unary, Variable, Literal, Call, Constructor, Block
 from .token import Token
 from .token_type import TokenType
 from .stmt import Stmt, Con, Run
@@ -54,10 +54,10 @@ class Parser:
   def parse(self) -> List[Stmt]:
     statements = []
     while not self._is_at_end():
-      try:
-        statements.append(self._parse_statement())
-      except ParseError as e:
-        self._synchronize()
+      stmt = self._parse_statement()
+      if stmt is not None:
+        # print(stmt)
+        statements.append(stmt)
       
     return statements
 
@@ -69,13 +69,18 @@ class Parser:
   #     return None
 
 
-  def _parse_statement(self) -> Stmt:
-    token = self._peek()
-    stmt_lambda = self.stmt_keywords.get(token.token_type)
-    if stmt_lambda is None:
-      raise self._error(token, "Expected a statement header keyword.")
-    self._advance()
-    return stmt_lambda()
+  def _parse_statement(self) -> Optional[Stmt]:
+    try:
+      token = self._advance()  # self._peek()
+      stmt_lambda = self.stmt_keywords.get(token.token_type)
+      if stmt_lambda is None:
+        raise self._error(token, "Expected a statement header keyword.")
+      # self._advance()
+      return stmt_lambda()
+
+    except ParseError as e:
+      self._synchronize()
+      return None
 
 
   def _parse_con(self) -> Con:
@@ -133,15 +138,23 @@ class Parser:
 
 
   def _synchronize(self):
-    self._advance()
+    # self._advance()
 
     while not self._is_at_end():
       if self._peek().token_type in [
-        TokenType.DEF, TokenType.TYP, TokenType.CON, TokenType.ARG, TokenType.RUN, TokenType.USE,
+        TokenType.DEF, TokenType.TYP, TokenType.CON, TokenType.ARG, TokenType.RUN, TokenType.USE, 
+        TokenType.ARROW, TokenType.RBRACE,
       ]:
         return
 
-      self._advance()
+      if self._match(TokenType.LBRACE):
+        try:
+          constructor = self._parse_constructor()
+          self._consume(TokenType.RBRACE, "Expected closing '}'.")
+        except ParseError as e:
+          pass
+      else:
+        self._advance()
 
 
   def _parse_expression(self) -> Expr:
@@ -251,7 +264,42 @@ class Parser:
       self._consume(TokenType.RPAREN, "Expected closing ')'.")
       return expr
 
+    if self._match(TokenType.LBRACE):
+      constructor = self._parse_constructor()
+      self._consume(TokenType.RBRACE, "Expected closing '}'.")
+      return constructor
+
     raise self._error(self._peek(), "Expected expression.")
+
+
+  def _parse_constructor(self) -> Constructor:
+    line = self._previous().line
+
+    stmts = self._parse_block()
+
+    # match a body with no expression
+    if self._check(TokenType.RBRACE) or self._is_at_end():
+      return Block(line = line, stmts = stmts, expr = None)
+
+    has_arrow = self._match(TokenType.ARROW)
+    token = self._peek()
+    expr = self._parse_expression()
+
+    # forbid statements then expression with no separating arrow
+    if not has_arrow and stmts:
+      self._error(token, "Expected '->' before expression.")
+
+    return Block(line = line, stmts = stmts, expr = expr)
+
+
+  def _parse_block(self) -> List[Stmt]:
+    stmts = []
+    while not self._check(TokenType.RBRACE) and not self._check(TokenType.ARROW) and not self._is_at_end():
+      stmt = self._parse_statement()
+      if stmt is not None:
+        stmts.append(stmt)
+
+    return stmts
 
 
   def _parse_arguments(self) -> List[Expr]:

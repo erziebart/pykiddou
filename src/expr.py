@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from enum import Enum
-from typing import List
+from typing import List, Optional, AbstractSet
 from .value import Value
 
 @dataclass
@@ -46,3 +46,18 @@ class Call(Expr):
   """A call to a function."""
   callee: Expr
   arguments: List[Expr]
+
+@dataclass
+class Constructor(Expr):
+  """A lambda constructor for a constructed type."""
+  pass
+
+@dataclass
+class Block(Constructor):
+  """A block of executable statements in a closure."""
+  from .stmt import Stmt 
+  stmts: List[Stmt]
+  expr: Optional[Expr]
+
+  # populated later during semantic check
+  dependent_names: Optional[AbstractSet[str]] = None

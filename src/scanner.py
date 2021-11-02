@@ -38,6 +38,8 @@ class Scanner:
       "#": lambda: self._scan_comment(),
       "(": lambda: self._add_token(TokenType.LPAREN),
       ")": lambda: self._add_token(TokenType.RPAREN),
+      "{": lambda: self._add_token(TokenType.LBRACE),
+      "}": lambda: self._add_token(TokenType.RBRACE),
       "+": lambda: self._add_token(TokenType.PLUS),
       "-": lambda: self._add_token(TokenType.MINUS),
       "*": lambda: self._add_token(TokenType.STAR),
@@ -68,6 +70,7 @@ class Scanner:
       "&&": lambda: self._add_token(TokenType.AND),
       "||": lambda: self._add_token(TokenType.OR),
       ":=": lambda: self._add_token(TokenType.RE_ASSIGN),
+      "->": lambda: self._add_token(TokenType.ARROW),
     }
     self.reserved_keywords = {
       "true": lambda: self._add_token(TokenType.TRUE, Bool(True)), 
