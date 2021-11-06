@@ -68,3 +68,11 @@ class Environment:
     if ref is None:
       raise NameException(f"undefined variable: {name}.")
     return ref.val
+
+
+  def get_local(self, name: str) -> Value:
+    """Get the current value for the given name, searching only the local environment."""
+    ref = self.locals.get(name)
+    if ref is None:
+      raise NameException(f"undefined variable: {name}.")
+    return ref.val

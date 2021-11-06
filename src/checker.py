@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from typing import List, Set, AbstractSet, Optional
 from .environment import Environment
 from .error import ErrorHandler, KiddouError
-from .expr import Expr, Binary, Unary, Literal, Variable, Call, Block
+from .expr import Expr, Binary, Unary, Literal, Variable, Call, Attribute, Block
 from .stmt import Stmt, Con, Run
 
 
@@ -41,6 +41,7 @@ class Checker:
       Literal: self._check_literal,
       Variable: self._check_variable,
       Call: self._check_call,
+      Attribute: self._check_attribute,
       Block: self._check_block,
     }
 
@@ -80,12 +81,26 @@ class Checker:
 
   def _check_run(self, run: Run, visible_names: VisibleNames) -> StatementNames:
     names_used = self._check_expr(run.expr, visible_names)
-    
-    if run.name is not None and run.reassign:
-      if run.name not in visible_names.names:
-        self._report_undefined(run.name, run.line_start)
-      names_used.add(run.name)
-    return StatementNames(names_used = names_used, name_declared = run.name)
+
+    receiver = run.receiver
+    if receiver is None:
+      return StatementNames(names_used = names_used, name_declared = None)
+
+    rcv_type = type(receiver)
+    name_declared = None
+
+    if rcv_type is Variable:
+      name_declared = receiver.name
+      if run.reassign:
+        names_used.add(name_declared)
+        if name_declared not in visible_names:
+          self._report_undefined(name_declared, receiver.line)
+
+    if rcv_type is Attribute:
+      names_used.update(self._check_expr(receiver, visible_names))
+      name_declared = receiver.name
+
+    return StatementNames(names_used = names_used, name_declared = name_declared)
 
 
   #################################################################################################
@@ -130,6 +145,11 @@ class Checker:
     return names_used
 
 
+  def _check_attribute(self, attribute: Attribute, visible_names: VisibleNames) -> Set[str]:
+    # note: don't check the attribute name exists, because it's only added at runtime
+    return self._check_expr(attribute.obj, visible_names)
+
+
   def _check_block(self, block: Block, visible_names: VisibleNames) -> Set[str]:
     inner_names = VisibleNames(
       parent = visible_names,
@@ -144,13 +164,9 @@ class Checker:
       if statement_names.name_declared is not None:
         inner_names.add(statement_names.name_declared)
 
-    print(names_used)
-
     if block.expr is not None:
       names = self._check_expr(block.expr, inner_names)
       names_used.update({name for name in names if name not in inner_names.names})
-
-    print(names_used)
 
     # populate set of names in the same scope that this block depends on
     block.dependent_names = visible_names.names.intersection(names_used)

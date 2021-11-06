@@ -25,3 +25,8 @@ class ImmutableException(RuntimeException):
   """An exception for modifying an immutable value."""
   def __init__(self, message):
     super(ImmutableException, self).__init__("ImmutableException: " + message)
+
+class AttributeException(RuntimeException):
+  """An exception for accessing an undefined attribute."""
+  def __init__(self, message):
+    super(AttributeException, self).__init__("AttributeException: " + message)

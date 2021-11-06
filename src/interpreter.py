@@ -1,12 +1,12 @@
 import math
 from contextlib import contextmanager
 from typing import List, Mapping, Collection
-from .callable import Function, KiddouBlock
+from .callable import Object, Callable, Function, KiddouBlock
 from .checker import Checker
 from .environment import Environment
 from .error import ErrorHandler, KiddouError
 from .exception import RuntimeException, TypeException, DivisionException
-from .expr import Expr, BinaryOp, Binary, UnaryOp, Unary, Literal, Variable, Call, Block
+from .expr import Expr, BinaryOp, Binary, UnaryOp, Unary, Literal, Variable, Call, Attribute, Block
 from .stmt import Stmt, Con, Run
 from .value import Value, Undef, Bool, Int, Float, String
 
@@ -48,6 +48,7 @@ class Interpreter:
       Literal: self._evaluate_literal,
       Variable: self._evaluate_variable,
       Call: self._evaluate_call,
+      Attribute: self._evaluate_attribute,
       Block: self._evaluate_block,
     }
     self.binary_handlers = {
@@ -123,13 +124,23 @@ class Interpreter:
 
   def _execute_run(self, run: Run):
     value = self._evaluate_expr(run.expr)
-    if run.name is None:
+    receiver = run.receiver
+    if receiver is None:
       return
 
-    if run.reassign:
-      self.env.overwrite(run.name, value)
-    else:
-      self.env.bind(run.name, value, True)
+    rcv_type = type(receiver)
+
+    if rcv_type is Variable:
+      if run.reassign:
+        self.env.overwrite(receiver.name, value)
+      else:
+        self.env.bind(receiver.name, value, True)
+
+    if rcv_type is Attribute:
+      obj_val = self._evaluate_expr(receiver.obj)
+      if not isinstance(obj_val, Object):
+        raise TypeException(f"type: <{obj_val.type_name()}> does not have attributes")
+      obj_val.set_attr(receiver.name, value)
 
 
   #################################################################################################
@@ -237,7 +248,6 @@ class Interpreter:
         result = math.nan if left_val.val in [0, math.nan] else math.copysign(math.inf, left_val.val)
         return Float(result)
     raise type_exception("%", left_val, right_val)
-
 
 
   def _evaluate_power(self, left: Expr, right: Expr) -> Value:
@@ -366,17 +376,23 @@ class Interpreter:
 
   def _evaluate_call(self, call: Call) -> Value:
     callee = self._evaluate_expr(call.callee)
+    if not isinstance(callee, Callable):
+      raise TypeException(f"type: <{callee.type_name()}> is not callable")
     arguments = [self._evaluate_expr(arg) for arg in call.arguments]
-    if isinstance(callee, Function):
-      return callee.call(arguments)
-    raise TypeException(f"can only make calls to functions, found <{callee.type_name()}>")
+    return callee.call(arguments, self.env)
+
+
+  def _evaluate_attribute(self, attribute: Attribute) -> Value:
+    obj_val = self._evaluate_expr(attribute.obj)
+    if not isinstance(obj_val, Object):
+      raise TypeException(f"type: <{obj_val.type_name()}> does not have attributes")
+    return obj_val.get_attr(attribute.name)
 
 
   def _evaluate_block(self, block: Block) -> Value:
-    block_env = self.env.copy_retain(block.dependent_names)
-
-    def run_block(args: Collection[Value]) -> Value:
-      with self._switch_env(block_env):
+    # define the block function
+    def run_block(args: Collection[Value], env: Environment) -> Value:
+      with self._switch_env(env):
         # exec stmts
         for stmt in block.stmts:
           self._execute_stmt(stmt)
@@ -387,19 +403,20 @@ class Interpreter:
           result = self._evaluate_expr(block.expr)
 
         return result
-
-    return KiddouBlock(func = run_block, name = None)
+    
+    # return the block
+    block_env = self.env.copy_retain(block.dependent_names)
+    return KiddouBlock(func=run_block, name=None, env=block_env)
 
 
   @contextmanager
-  def _switch_env(self, env: Environment):
+  def _switch_env(self, new_env: Environment):
     try:
       # transition to new env
       old_env = self.env
-      new_env = env.copy_retain(set())
       self.env = new_env
 
-      yield new_env
+      yield None
     except Exception as e:
       raise e
     finally:

@@ -48,6 +48,12 @@ class Call(Expr):
   arguments: List[Expr]
 
 @dataclass
+class Attribute(Expr):
+  """An attribute access on an object."""
+  obj: Expr
+  name: str
+
+@dataclass
 class Constructor(Expr):
   """A lambda constructor for a constructed type."""
   pass

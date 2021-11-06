@@ -1,9 +1,14 @@
 from typing import List, Callable, Optional
 from .error import ErrorHandler, KiddouError
-from .expr import Expr, BinaryOp, Binary, UnaryOp, Unary, Variable, Literal, Call, Constructor, Block
+from .expr import Expr, BinaryOp, Binary, UnaryOp, Unary, Variable, Literal, Call, Attribute, Constructor, Block
 from .token import Token
 from .token_type import TokenType
 from .stmt import Stmt, Con, Run
+
+
+def is_valid_receiver(expr: Expr) -> bool:
+  """Returns True iff the given expression is a valid receiver for the LHS of an assignment."""
+  return type(expr) in [Variable, Attribute]
 
 
 class ParseError(Exception):
@@ -109,14 +114,14 @@ class Parser:
 
   def _parse_run(self) -> Run:
     line_start = self._previous().line
-    reciever = None
+    receiver = None
     assignment = None
     expr = self._parse_expression()
 
-    # if this is an assignment, reinterpret LHS as reciever
+    # if this is an assignment, reinterpret LHS as receiver
     if self._match(*self.assignment_token_types):
-      if type(expr) is Variable:
-        reciever = expr
+      if is_valid_receiver(expr):
+        receiver = expr
         assignment = self._previous()
         expr = self._parse_expression()
       else:
@@ -131,7 +136,7 @@ class Parser:
     return Run(
       line_start = line_start,
       line_end = line_end,
-      name = reciever.name if reciever is not None else None,
+      receiver = receiver,
       expr = expr,
       reassign = reassign
     )
@@ -241,6 +246,9 @@ class Parser:
           arguments = self._parse_arguments()
         rparen = self._consume(TokenType.RPAREN, "Expected closing ')' after arguments.")
         expr = Call(callee=expr, arguments=arguments, line=rparen.line)
+      elif self._match(TokenType.DOT):
+        name = self._consume(TokenType.IDENTIFIER, "Expected attribute name after '.'.")
+        expr = Attribute(obj=expr, name=name.lexeme, line=name.line)
       else:
         break
 

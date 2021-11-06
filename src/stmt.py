@@ -17,6 +17,6 @@ class Con(Stmt):
 @dataclass
 class Run(Stmt):
   """A run statement using the 'run' keyword."""
-  name: Optional[str]
+  receiver: Optional[Expr]
   expr: Expr
   reassign: bool
