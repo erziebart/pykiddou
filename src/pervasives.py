@@ -2,7 +2,7 @@ import math
 from typing import Collection
 from .environment import Environment
 from .value import Value, Undef, Float
-from .callable import LibraryFunction
+from .callable import Function
 
 
 def _print(args: Collection[Value], env: Environment) -> Value:
@@ -14,5 +14,5 @@ def _print(args: Collection[Value], env: Environment) -> Value:
 pervasives = {
   "inf": Float(math.inf),
   "nan": Float(math.nan),
-  "print": LibraryFunction(func=_print, name="print")
+  "print": Function(func=_print, name="print")
 }

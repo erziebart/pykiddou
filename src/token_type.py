@@ -14,7 +14,7 @@ _token_type_list = [
 
   # keywords
   "RUN", "CON", "DEF", "ARG", "USE", "AS", "TYP",
-  "UNDEF", "TRUE", "FALSE", "THIS",
+  "UNDEF", "TRUE", "FALSE",
 
   # literals
   "INT_LIT", "FLOAT_LIT", "STRING_LIT", "IDENTIFIER",

@@ -153,7 +153,7 @@ class Checker:
   def _check_block(self, block: Block, visible_names: VisibleNames) -> Set[str]:
     inner_names = VisibleNames(
       parent = visible_names,
-      names = set(),
+      names = set(["this"]),
     )
 
     names_used = set()

@@ -1,26 +1,15 @@
-from abc import abstractmethod
-from dataclasses import dataclass
+from abc import ABC, abstractmethod
 from typing import Optional, Callable as Cbl, Collection
 from .environment import Environment
 from .exception import NameException, AttributeException
+from .object import KiddouModule
 from .value import Value
 
 
-class Callable:
+class Callable(ABC):
   """Something that can be called using '(...)'."""
   @abstractmethod
   def call(self, args: Collection[Value], env: Environment) -> Value:
-    pass
-    
-
-class Object:
-  """Something which contains attributes, accessed using '.'."""
-  @abstractmethod
-  def get_attr(self, name: str) -> Value:
-    pass
-
-  @abstractmethod
-  def set_attr(self, name: str, value: Value):
     pass
 
 
@@ -44,33 +33,29 @@ class Function(Value, Callable):
     return self.func(args, env)
 
 
-@dataclass
-class LibraryFunction(Function):
-  def __init__(self, *args, **kwargs):
-    super().__init__(*args, **kwargs)
-
-
-@dataclass
-class KiddouBlock(Function, Object):
+class KiddouBlock(Function, KiddouModule):
   def __init__(
     self, 
     func: Cbl[[Collection[Value], Environment], Value], 
+    name: Optional[str],
     env: Environment,
     *args, 
     **kwargs
   ):
     self.env = env
+    env_name = name if name is not None else "this"
 
     def wrapped_func(args: Collection[Value], env: Environment) -> Value:
       try:
         new_env = self.env.copy_retain(set())
+        new_env.bind(env_name, self)
         return func(args, new_env)
       except Exception as e:
         raise e
       finally:
         self.env = new_env
 
-    super().__init__(wrapped_func, *args, **kwargs)
+    super().__init__(wrapped_func, name, *args, **kwargs)
 
   def get_attr(self, name: str) -> Value:
     try:

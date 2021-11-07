@@ -1,12 +1,13 @@
 import math
 from contextlib import contextmanager
 from typing import List, Mapping, Collection
-from .callable import Object, Callable, Function, KiddouBlock
+from .callable import Callable, KiddouBlock
 from .checker import Checker
 from .environment import Environment
 from .error import ErrorHandler, KiddouError
 from .exception import RuntimeException, TypeException, DivisionException
 from .expr import Expr, BinaryOp, Binary, UnaryOp, Unary, Literal, Variable, Call, Attribute, Block
+from .object import Object, KiddouModule
 from .stmt import Stmt, Con, Run
 from .value import Value, Undef, Bool, Int, Float, String
 
@@ -35,6 +36,8 @@ class Interpreter:
     self.globals = Environment()
     for name, value in pervasives.items():
       self.globals.bind(name, value)
+    self.module = KiddouModule(self.globals, None)
+    self.globals.bind("this", self.module)
     self.env = self.globals
     self.checker = Checker(error_handler)
 
