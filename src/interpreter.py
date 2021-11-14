@@ -3,10 +3,12 @@ from contextlib import contextmanager
 from typing import List, Mapping, Collection
 from .callable import Callable, KiddouBlock
 from .checker import Checker
+from .constructor import Block, Sequence
+from .container import Container, KiddouList
 from .environment import Environment
 from .error import ErrorHandler, KiddouError
 from .exception import RuntimeException, TypeException, DivisionException
-from .expr import Expr, BinaryOp, Binary, UnaryOp, Unary, Literal, Variable, Call, Attribute, Block
+from .expr import Expr, BinaryOp, Binary, UnaryOp, Unary, Literal, Variable, Call, Index, Attribute
 from .object import Object, KiddouModule
 from .stmt import Stmt, Con, Run
 from .value import Value, Undef, Bool, Int, Float, String
@@ -51,8 +53,10 @@ class Interpreter:
       Literal: self._evaluate_literal,
       Variable: self._evaluate_variable,
       Call: self._evaluate_call,
+      Index: self._evaluate_index,
       Attribute: self._evaluate_attribute,
       Block: self._evaluate_block,
+      Sequence: self._evaluate_sequence,
     }
     self.binary_handlers = {
       BinaryOp.ADD: self._evaluate_add,
@@ -144,6 +148,13 @@ class Interpreter:
       if not isinstance(obj_val, Object):
         raise TypeException(f"type: <{obj_val.type_name()}> does not have attributes")
       obj_val.set_attr(receiver.name, value)
+
+    if rcv_type is Index:
+      container_val = self._evaluate_expr(receiver.container)
+      if not isinstance(container_val, Container):
+        raise TypeException(f"type: <{container_val.type_name()}> is not a container")
+      index_val = self._evaluate_expr(receiver.index)
+      container_val.set(index_val, value)
 
 
   #################################################################################################
@@ -385,6 +396,14 @@ class Interpreter:
     return callee.call(arguments, self.env)
 
 
+  def _evaluate_index(self, index: Index) -> Value:
+    container_val = self._evaluate_expr(index.container)
+    if not isinstance(container_val, Container):
+      raise TypeException(f"type: <{container_val.type_name()}> is not a container")
+    index_val = self._evaluate_expr(index.index)
+    return container_val.get(index_val)
+
+
   def _evaluate_attribute(self, attribute: Attribute) -> Value:
     obj_val = self._evaluate_expr(attribute.obj)
     if not isinstance(obj_val, Object):
@@ -425,3 +444,8 @@ class Interpreter:
     finally:
       # restore previous env
       self.env = old_env
+
+
+  def _evaluate_sequence(self, sequence: Sequence) -> Value:
+    ls = [self._evaluate_expr(element) for element in sequence.elements]
+    return KiddouList(ls=ls)

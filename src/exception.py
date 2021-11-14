@@ -30,3 +30,8 @@ class AttributeException(RuntimeException):
   """An exception for accessing an undefined attribute."""
   def __init__(self, message):
     super(AttributeException, self).__init__("AttributeException: " + message)
+
+class IndexOutOfBoundsException(RuntimeException):
+  """An exception for trying to modify a non-existant index in a list."""
+  def __init__(self, message):
+    super(IndexOutOfBoundsException, self).__init__("IndexOutOfBoundsException: " + message)

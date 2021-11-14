@@ -2,7 +2,7 @@ from enum import Enum
 
 _token_type_list = [
   # grouping
-  "LPAREN", "RPAREN", "COMMA", "LBRACE", "RBRACE", "ARROW",
+  "LPAREN", "RPAREN", "COMMA", "LBRACE", "RBRACE", "ARROW", "LBRACKET", "RBRACKET",
 
   # operators
   "PLUS", "MINUS", "STAR", "SLASH", "DBLSLASH", "PERCENT", "CARET",

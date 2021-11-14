@@ -34,6 +34,7 @@ class Function(Value, Callable):
 
 
 class KiddouBlock(Function, KiddouModule):
+  """A block of code, which can be run, then treated as an object with attributes."""
   def __init__(
     self, 
     func: Cbl[[Collection[Value], Environment], Value], 

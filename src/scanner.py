@@ -40,6 +40,8 @@ class Scanner:
       ")": lambda: self._add_token(TokenType.RPAREN),
       "{": lambda: self._add_token(TokenType.LBRACE),
       "}": lambda: self._add_token(TokenType.RBRACE),
+      "[": lambda: self._add_token(TokenType.LBRACKET),
+      "]": lambda: self._add_token(TokenType.RBRACKET),
       "+": lambda: self._add_token(TokenType.PLUS),
       "-": lambda: self._add_token(TokenType.MINUS),
       "*": lambda: self._add_token(TokenType.STAR),

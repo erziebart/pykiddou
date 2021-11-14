@@ -1,6 +1,7 @@
 from typing import List, Callable, Optional
+from .constructor import Constructor, Block, Sequence
 from .error import ErrorHandler, KiddouError
-from .expr import Expr, BinaryOp, Binary, UnaryOp, Unary, Variable, Literal, Call, Attribute, Constructor, Block
+from .expr import Expr, BinaryOp, Binary, UnaryOp, Unary, Variable, Literal, Call, Index, Attribute
 from .token import Token
 from .token_type import TokenType
 from .stmt import Stmt, Con, Run
@@ -8,7 +9,7 @@ from .stmt import Stmt, Con, Run
 
 def is_valid_receiver(expr: Expr) -> bool:
   """Returns True iff the given expression is a valid receiver for the LHS of an assignment."""
-  return type(expr) in [Variable, Attribute]
+  return type(expr) in [Variable, Index, Attribute]
 
 
 class ParseError(Exception):
@@ -31,6 +32,19 @@ class Parser:
       TokenType.ASSIGN, 
       TokenType.RE_ASSIGN
     ]
+    self.statement_boundary_token_types = {
+      TokenType.DEF, 
+      TokenType.TYP, 
+      TokenType.CON, 
+      TokenType.ARG, 
+      TokenType.RUN, 
+      TokenType.USE, 
+      TokenType.ARROW,
+    }
+    self.constructor_boundary_token_types = {
+      TokenType.RBRACE, 
+      TokenType.RBRACKET,
+    }
     self.token_type_to_binary_op = {
       TokenType.SEMI: BinaryOp.PIECE,
       TokenType.QUESTION: BinaryOp.DOMAIN,
@@ -76,11 +90,10 @@ class Parser:
 
   def _parse_statement(self) -> Optional[Stmt]:
     try:
-      token = self._advance()  # self._peek()
+      token = self._advance()
       stmt_lambda = self.stmt_keywords.get(token.token_type)
       if stmt_lambda is None:
         raise self._error(token, "Expected a statement header keyword.")
-      # self._advance()
       return stmt_lambda()
 
     except ParseError as e:
@@ -143,23 +156,40 @@ class Parser:
 
 
   def _synchronize(self):
-    # self._advance()
-
     while not self._is_at_end():
-      if self._peek().token_type in [
-        TokenType.DEF, TokenType.TYP, TokenType.CON, TokenType.ARG, TokenType.RUN, TokenType.USE, 
-        TokenType.ARROW, TokenType.RBRACE,
-      ]:
+      if self._peek().token_type in self.statement_boundary_token_types:
         return
 
-      if self._match(TokenType.LBRACE):
-        try:
-          constructor = self._parse_constructor()
+      if self._peek().token_type in self.constructor_boundary_token_types:
+        return
+
+      try:
+        if self._match(TokenType.LBRACE):
+          self._parse_constructor(is_eager=False)
+          if self._match(TokenType.RBRACKET):
+            raise self._error("Closing ']' does not match opening '{'.")
           self._consume(TokenType.RBRACE, "Expected closing '}'.")
-        except ParseError as e:
-          pass
-      else:
-        self._advance()
+        elif self._match(TokenType.LBRACKET):
+          self._parse_constructor(is_eager=True)
+          if self._match(TokenType.RBRACE):
+            raise self._error("Closing '}' does not match opening '['.")
+          self._consume(TokenType.RBRACKET, "Expected closing ']'.")
+        else:
+          self._advance()
+      except ParseError as e:
+        pass
+
+
+  def _left_assoc_binary(self, element: Callable[[], Expr], token_types: List[TokenType]) -> Expr:
+    expr = element()
+
+    while self._match(*token_types):
+      token = self._previous()
+      operator = self.token_type_to_binary_op.get(token.token_type)
+      right = element()
+      expr = Binary(left=expr, operator=operator, right=right, line=token.line)
+
+    return expr
 
 
   def _parse_expression(self) -> Expr:
@@ -246,6 +276,10 @@ class Parser:
           arguments = self._parse_arguments()
         rparen = self._consume(TokenType.RPAREN, "Expected closing ')' after arguments.")
         expr = Call(callee=expr, arguments=arguments, line=rparen.line)
+      elif self._match(TokenType.LBRACKET):
+        index = self._parse_expression()
+        rbracket = self._consume(TokenType.RBRACKET, "Expected closing ']' after index.")
+        expr = Index(container=expr, index=index, line=rbracket.line)
       elif self._match(TokenType.DOT):
         name = self._consume(TokenType.IDENTIFIER, "Expected attribute name after '.'.")
         expr = Attribute(obj=expr, name=name.lexeme, line=name.line)
@@ -253,6 +287,17 @@ class Parser:
         break
 
     return expr
+
+
+  def _parse_arguments(self) -> List[Expr]:
+    result = [self._parse_expression()]
+
+    while self._match(TokenType.COMMA):
+      if len(result) > 255:
+        self._error(self._peek(), "Can't pass more than 255 arguments.")
+      result.append(self._parse_expression())
+
+    return result
 
 
   def _parse_primary(self) -> Expr:
@@ -273,21 +318,48 @@ class Parser:
       return expr
 
     if self._match(TokenType.LBRACE):
-      constructor = self._parse_constructor()
+      constructor = self._parse_constructor(is_eager=False)
+      if self._match(TokenType.RBRACKET):
+        raise self._error(self._previous(), "Closing ']' does not match opening '{'.")
       self._consume(TokenType.RBRACE, "Expected closing '}'.")
+      return constructor
+
+    if self._match(TokenType.LBRACKET):
+      constructor = self._parse_constructor(is_eager=True)
+      if self._match(TokenType.RBRACE):
+        raise self._error(self._previous(), "Closing '}' does not match opening '['.")
+      self._consume(TokenType.RBRACKET, "Expected closing ']'.")
       return constructor
 
     raise self._error(self._peek(), "Expected expression.")
 
 
-  def _parse_constructor(self) -> Constructor:
+  def _parse_constructor(self, is_eager: bool) -> Constructor:
     line = self._previous().line
 
-    stmts = self._parse_block()
+    if self._peek().token_type in self.constructor_boundary_token_types:
+      self._error(self._previous(), "Empty constructor not allowed.")
+      return Block(line=line, stmts=[], expr=None, is_eager=is_eager)
+
+    if self._peek().token_type in self.statement_boundary_token_types:
+      return self._parse_block(is_eager, line)
+
+    expr = self._parse_expression()
+    return self._parse_sequence(is_eager, line, expr)
+
+
+  def _parse_block(self, is_eager: bool, line: int) -> Block:
+    stmts = []
+    while not (
+      self._check(TokenType.RBRACE) or self._check(TokenType.RBRACKET) or self._check(TokenType.ARROW)
+    ) and not self._is_at_end():
+      stmt = self._parse_statement()
+      if stmt is not None:
+        stmts.append(stmt)
 
     # match a body with no expression
-    if self._check(TokenType.RBRACE) or self._is_at_end():
-      return Block(line = line, stmts = stmts, expr = None)
+    if self._is_at_end() or self._check(TokenType.RBRACE) or self._check(TokenType.RBRACKET):
+      return Block(line=line, stmts=stmts, expr=None, is_eager=is_eager)
 
     has_arrow = self._match(TokenType.ARROW)
     token = self._peek()
@@ -297,40 +369,16 @@ class Parser:
     if not has_arrow and stmts:
       self._error(token, "Expected '->' before expression.")
 
-    return Block(line = line, stmts = stmts, expr = expr)
+    return Block(line=line, stmts=stmts, expr=expr, is_eager=is_eager)
 
 
-  def _parse_block(self) -> List[Stmt]:
-    stmts = []
-    while not self._check(TokenType.RBRACE) and not self._check(TokenType.ARROW) and not self._is_at_end():
-      stmt = self._parse_statement()
-      if stmt is not None:
-        stmts.append(stmt)
-
-    return stmts
-
-
-  def _parse_arguments(self) -> List[Expr]:
-    result = [self._parse_expression()]
+  def _parse_sequence(self, is_eager: bool, line:int, first_element: Expr) -> Sequence:
+    elements = [first_element]
 
     while self._match(TokenType.COMMA):
-      if len(result) > 255:
-        self._error(self._peek(), "Can't pass more than 255 arguments.")
-      result.append(self._parse_expression())
+      elements.append(self._parse_expression())
 
-    return result
-
-
-  def _left_assoc_binary(self, element: Callable[[], Expr], token_types: List[TokenType]) -> Expr:
-    expr = element()
-
-    while self._match(*token_types):
-      token = self._previous()
-      operator = self.token_type_to_binary_op.get(token.token_type)
-      right = element()
-      expr = Binary(left=expr, operator=operator, right=right, line=token.line)
-
-    return expr
+    return Sequence(line=line, elements=elements, is_eager=is_eager)
 
 
   def _match(self, *token_types: List[TokenType]) -> bool:

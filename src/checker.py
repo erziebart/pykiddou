@@ -1,8 +1,9 @@
 from dataclasses import dataclass
 from typing import List, Set, AbstractSet, Optional
+from .constructor import Block, Sequence
 from .environment import Environment
 from .error import ErrorHandler, KiddouError
-from .expr import Expr, Binary, Unary, Literal, Variable, Call, Attribute, Block
+from .expr import Expr, Binary, Unary, Literal, Variable, Call, Index, Attribute
 from .stmt import Stmt, Con, Run
 
 
@@ -41,8 +42,10 @@ class Checker:
       Literal: self._check_literal,
       Variable: self._check_variable,
       Call: self._check_call,
+      Index: self._check_index,
       Attribute: self._check_attribute,
       Block: self._check_block,
+      Sequence: self._check_sequence,
     }
 
   
@@ -96,9 +99,9 @@ class Checker:
         if name_declared not in visible_names:
           self._report_undefined(name_declared, receiver.line)
 
-    if rcv_type is Attribute:
+    if rcv_type in { Index, Attribute }:
       names_used.update(self._check_expr(receiver, visible_names))
-      name_declared = receiver.name
+      name_declared = None
 
     return StatementNames(names_used = names_used, name_declared = name_declared)
 
@@ -138,10 +141,15 @@ class Checker:
 
 
   def _check_call(self, call: Call, visible_names: VisibleNames) -> Set[str]:
-    names_used = set()
-    names_used.update(self._check_expr(call.callee, visible_names))
+    names_used = self._check_expr(call.callee, visible_names)
     for arg in call.arguments:
       names_used.update(self._check_expr(arg, visible_names))
+    return names_used
+
+
+  def _check_index(self, index: Index, visible_names: VisibleNames) -> Set[str]:
+    names_used = self._check_expr(index.container, visible_names)
+    names_used.update(self._check_expr(index.index, visible_names))
     return names_used
 
 
@@ -151,6 +159,9 @@ class Checker:
 
 
   def _check_block(self, block: Block, visible_names: VisibleNames) -> Set[str]:
+    if block.is_eager:
+      self._report_unsupported_construct("[<block>]", block.line)
+
     inner_names = VisibleNames(
       parent = visible_names,
       names = set(["this"]),
@@ -174,10 +185,33 @@ class Checker:
     return names_used
 
 
+  def _check_sequence(self, sequence: Sequence, visible_names: VisibleNames) -> Set[str]:
+    if not sequence.is_eager:
+      self._report_unsupported_construct("{<seq>}", sequence.line)
+
+    names_used = set()
+
+    for expr in sequence.elements:
+      names_used.update(self._check_expr(expr, visible_names))
+
+    return names_used
+
+
   def _report_undefined(self, name: str, line: int):
     self.error_handler.error(
       KiddouError(
         message = f"undefined variable: {name}",
+        line = line,
+        col = None,
+        text = None
+      )
+    )
+
+
+  def _report_unsupported_construct(self, construct: str, line: int):
+    self.error_handler.error(
+      KiddouError(
+        message = f"constructor: {construct} is not supported",
         line = line,
         col = None,
         text = None
