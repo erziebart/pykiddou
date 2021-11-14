@@ -57,12 +57,3 @@ class KiddouBlock(Function, KiddouModule):
         self.env = new_env
 
     super().__init__(wrapped_func, name, *args, **kwargs)
-
-  def get_attr(self, name: str) -> Value:
-    try:
-      return self.env.get_local(name)
-    except NameException as e:
-      raise AttributeException(f"undefined attribute: {name}")
-
-  def set_attr(self, name: str, value: Value):
-    self.env.bind(name, value)

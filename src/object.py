@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Optional
 from .environment import Environment
+from .exception import NameException, AttributeException
 from .value import Value
 
 
@@ -28,7 +29,10 @@ class KiddouModule(Object, Value):
       raise AttributeException(f"undefined attribute: {name}")
 
   def set_attr(self, name: str, value: Value):
-    self.env.bind(name, value)
+    try:
+      self.env.overwrite_local(name, value)
+    except NameException as e:
+      raise AttributeException(f"undefined attribute: {name}")
 
   def type_name(self) -> str:
     return "Module"

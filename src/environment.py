@@ -60,6 +60,23 @@ class Environment:
     ref.val = value
 
 
+  def overwrite_local(self, name: str, value: Value):
+    """
+    Overwrite the given name to the given value, searching only the local environment.
+
+    This produces an error if the name is not found or the current value is immutable. 
+    """
+    ref = self.locals.get(name)
+
+    if ref is None:
+      raise NameException(f"undefined variable: {name}.")
+
+    if not ref.mutable:
+      raise ImmutableException(f"immutable variable: {name}.")
+
+    ref.val = value
+
+
   def get(self, name: str) -> Value:
     """Get the current value for the given name in this environment."""
     ref = self.locals.get(name)

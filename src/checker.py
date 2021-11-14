@@ -99,9 +99,13 @@ class Checker:
         if name_declared not in visible_names:
           self._report_undefined(name_declared, receiver.line)
 
-    if rcv_type in { Index, Attribute }:
+    if rcv_type is Attribute:
+      if not run.reassign:
+        self._report_attribute_creation(receiver.line)
       names_used.update(self._check_expr(receiver, visible_names))
-      name_declared = None
+
+    if rcv_type is Index:
+      names_used.update(self._check_expr(receiver, visible_names))
 
     return StatementNames(names_used = names_used, name_declared = name_declared)
 
@@ -212,6 +216,16 @@ class Checker:
     self.error_handler.error(
       KiddouError(
         message = f"constructor: {construct} is not supported",
+        line = line,
+        col = None,
+        text = None
+      )
+    )
+
+  def _report_attribute_creation(self, line: int):
+    self.error_handler.error(
+      KiddouError(
+        message = "attribute creation not allowed, use reassignment (:=) instead",
         line = line,
         col = None,
         text = None
